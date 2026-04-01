@@ -1,0 +1,46 @@
+:root {
+  --color-sky: #7ec8e3;
+  --color-blush: #f8afcb;
+  --color-background: #f4fbfe;
+  --color-text: #444444;
+  --color-text-muted: #66727b;
+  --color-text-soft: #8796a2;
+  --color-white: #ffffff;
+  --color-border-soft: #e3eef6;
+  --color-input-border: #e3eef6;
+  --color-line: rgba(126, 200, 227, 0.22);
+  --color-line-strong: rgba(126, 200, 227, 0.34);
+  --color-surface: #ffffff;
+  --color-surface-strong: #ffffff;
+  --gradient-primary: linear-gradient(135deg, #7ec8e3, #f8afcb);
+  --gradient-primary-hover: linear-gradient(135deg, #72bddb, #f19ebb);
+  --gradient-surface: linear-gradient(
+    180deg,
+    #f7fbfe 0%,
+    #ffffff 100%
+  );
+  --gradient-soft: linear-gradient(
+    135deg,
+    rgba(126, 200, 227, 0.14) 0%,
+    rgba(248, 175, 203, 0.1) 100%
+  );
+  --gradient-chat: linear-gradient(
+    180deg,
+    #f7fbfe 0%,
+    #ffffff 100%
+  );
+  --shadow-soft: 0 12px 28px rgba(126, 200, 227, 0.1);
+  --shadow-card: 0 4px 12px rgba(126, 200, 227, 0.08);
+  --shadow-button: 0 8px 18px rgba(126, 200, 227, 0.14);
+  --radius-xl: 34px;
+  --radius-lg: 24px;
+  --radius-md: 20px;
+  --radius-sm: 16px;
+  --duration-fast: 0.22s;
+  --duration-base: 0.32s;
+  --duration-slow: 0.4s;
+  --ease-soft: ease-in-out;
+  --font-heading: 'Segoe UI', system-ui, sans-serif;
+  --font-body: 'Segoe UI', system-ui, sans-serif;
+  --app-max-width: 540px;
+}
