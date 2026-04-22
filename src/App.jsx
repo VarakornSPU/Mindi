@@ -1,44 +1,64 @@
-import { useEffect, useState } from 'react'
-import ChatPage from './pages/ChatPage'
-import Home from './pages/Home'
-
-const resolvePageFromHash = () =>
-  typeof window !== 'undefined' && window.location.hash === '#chat'
-    ? 'chat'
-    : 'home'
+import { useState } from 'react'
+import Sidebar from './components/Sidebar'
+import ChatLayout from './components/ChatLayout'
+import ArticleModal from './components/ArticleModal'
+import AuthPage from './components/AuthPage'
+import { useAppContext } from './context/AppContext'
+import { articlesMock } from './mock/articlesMock'
 
 function App() {
-  const [currentPage, setCurrentPage] = useState(resolvePageFromHash)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [isArticleOpen, setArticleOpen] = useState(false)
 
-  useEffect(() => {
-    const handleHashChange = () => {
-      setCurrentPage(resolvePageFromHash())
-    }
+  const { auth, chat } = useAppContext()
+  const {
+    chats,
+    currentChatId,
+    currentChat,
+    isTyping,
+    createNewChat,
+    selectChat,
+    deleteChat,
+    sendMessage,
+  } = chat
 
-    window.addEventListener('hashchange', handleHashChange)
-
-    return () => {
-      window.removeEventListener('hashchange', handleHashChange)
-    }
-  }, [])
-
-  const navigateTo = (page) => {
-    window.location.hash = page === 'chat' ? 'chat' : 'home'
-    setCurrentPage(page)
+  if (!auth.isAuthenticated) {
+    return <AuthPage onLogin={auth.login} onRegister={auth.register} />
   }
 
   return (
-    <main className="app-shell">
-      <div className="app-aurora app-aurora--blue" aria-hidden="true" />
-      <div className="app-aurora app-aurora--pink" aria-hidden="true" />
-      <div className="app-grain" aria-hidden="true" />
+    <div className="flex h-screen w-full overflow-hidden bg-[#F8F9FC] text-[#4B5563]">
+      <Sidebar
+        user={auth.currentUser}
+        chats={chats}
+        currentChatId={currentChatId}
+        onSelectChat={(chatId) => {
+          selectChat(chatId)
+          setSidebarOpen(false)
+        }}
+        onDeleteChat={deleteChat}
+        onNewChat={() => {
+          createNewChat()
+          setSidebarOpen(false)
+        }}
+        onOpenArticles={() => {
+          setArticleOpen(true)
+          setSidebarOpen(false)
+        }}
+        onLogout={auth.logout}
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+      />
 
-      {currentPage === 'chat' ? (
-        <ChatPage onBack={() => navigateTo('home')} />
-      ) : (
-        <Home onStartChat={() => navigateTo('chat')} />
-      )}
-    </main>
+      <ChatLayout
+        chat={currentChat}
+        isTyping={isTyping}
+        onSend={sendMessage}
+        onOpenSidebar={() => setSidebarOpen(true)}
+      />
+
+      <ArticleModal isOpen={isArticleOpen} articles={articlesMock} onClose={() => setArticleOpen(false)} />
+    </div>
   )
 }
 

@@ -1,16 +1,69 @@
-# React + Vite
+# Mindi - Frontend Only Mode
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Mindi is a React + Vite chat UI that runs without a local backend.
 
-Currently, two official plugins are available:
+## Getting Started
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+### Prerequisites
+- Node.js 18+
+- npm
 
-## React Compiler
+### Installation
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+```bash
+npm install
+```
 
-## Expanding the ESLint configuration
+### Run (Single Port)
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+Both commands run the same dev server on `http://localhost:5173`.
+
+```bash
+npm run dev
+```
+
+```bash
+npm start
+```
+
+## Local Authentication and Chat Memory
+
+- Register/login works in browser `localStorage`
+- Chat history is stored in `localStorage`
+- Chat memory is global (not tied to user)
+
+## Optional RAG Endpoint
+
+If your teammate has a RAG API ready, set this in `.env`:
+
+```bash
+VITE_RAG_API_URL=https://your-rag-endpoint.example.com
+```
+
+The app will call this endpoint with `POST` body:
+
+```json
+{ "query": "user message" }
+```
+
+Expected response fields (one of these):
+
+```json
+{ "reply": "..." }
+```
+
+or
+
+```json
+{ "message": "..." }
+```
+
+If `VITE_RAG_API_URL` is not set or request fails, the app uses a built-in fallback reply.
+
+## Scripts
+
+- `npm run dev` - Vite dev server on port 5173
+- `npm start` - Same as `npm run dev` (single-port behavior)
+- `npm run build` - Build frontend
+- `npm run preview` - Preview production build
+- `npm run lint` - Run ESLint
