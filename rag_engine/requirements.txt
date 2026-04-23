@@ -1,0 +1,3 @@
+pip install fastapi uvicorn ollama langchain-huggingface langchain-community chromadb pandas openpyxl unstructured jq
+
+uvicorn main:app --reload --port 8000

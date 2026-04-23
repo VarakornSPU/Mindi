@@ -3,16 +3,9 @@ import MessageBubble from './MessageBubble'
 import TypingIndicator from './TypingIndicator'
 
 const getRhythmClass = (messages, index) => {
-  if (index === 0) {
-    return 'message-row--opening'
-  }
-
+  if (index === 0) return 'message-row--opening'
   const previousMessage = messages[index - 1]
-
-  if (previousMessage?.role === messages[index].role) {
-    return 'message-row--clustered'
-  }
-
+  if (previousMessage?.role === messages[index].role) return 'message-row--clustered'
   return index % 3 === 0 ? 'message-row--pause' : 'message-row--breathing'
 }
 
@@ -31,10 +24,10 @@ function ChatBox({ messages, isTyping }) {
       {messages.map((message, index) => (
         <MessageBubble
           key={message.id}
-          message={message.message}
+          message={message.content} 
           role={message.role}
           rhythm={getRhythmClass(messages, index)}
-          time={message.time}
+          time={message.createdAt} 
         />
       ))}
       {isTyping ? <TypingIndicator /> : null}
