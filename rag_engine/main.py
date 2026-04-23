@@ -677,33 +677,49 @@ async def health_check():
 async def ask_question(item: Question):
     try:
         # 1. ค้นหาข้อมูลภาษาอังกฤษที่เกี่ยวข้อง (Retrieval)
-        # ใช้ similarity_search เพื่อดึง Context ภาษาอังกฤษมา
         results = vectorstore.similarity_search(item.query, k=3)
-        context = "\\n".join([res.page_content for res in results])
+        
+        # ✅ สร้าง Context แบบมีชื่อไฟล์กำกับไว้ด้วย
+        context_parts = []
+        for i, res in enumerate(results):
+            # ดึงชื่อไฟล์จาก metadata (ถ้าไม่มีให้ใส่ว่า ไม่ระบุที่มา)
+            source_path = res.metadata.get('source', 'ไม่ระบุที่มา')
+            # ตัดให้เหลือแค่ชื่อไฟล์ (ตัด path ยาวๆ ทิ้งไป)
+            source_name = os.path.basename(source_path) if '\\' in source_path or '/' in source_path else source_path
+            
+            # รวมเนื้อหาและที่มาเข้าด้วยกัน
+            context_parts.append(f"[ข้อมูลจากไฟล์: {source_name}]\n{res.page_content}")
+            
+        context = "\n\n".join(context_parts)
         
         # 2. เตรียมประวัติการคุยเพื่อส่งให้โมเดล
         history_text = ""
         if item.history:
             for msg in item.history[-5:]: # เอา 5 ข้อความล่าสุด
                 role_name = "ผู้ใช้" if msg.role == "user" else "ที่ปรึกษา"
-                history_text += f"{role_name}: {msg.content}\\n"
+                history_text += f"{role_name}: {msg.content}\n"
 
-        # 3. สร้าง Prompt ที่เน้นความเป็นที่ปรึกษาและภาษาไทย
-        prompt = f"""คุณคือที่ปรึกษาด้านความสัมพันธ์ที่อบอุ่น ชื่อว่า 'Mindi' 
-    หน้าที่ของคุณคืออ่านข้อมูลอ้างอิงที่เป็นภาษาอังกฤษ แล้วนำมาตอบเป็นภาษาไทยให้นุ่มนวล
+        # 3. สร้าง Prompt เพิ่มกฎให้บอกแหล่งที่มา
+        prompt = f"""[SYSTEM INSTRUCTIONS - CRITICAL RULES]
+You are "Mindi", a warm, empathetic relationship counselor who speaks like a highly supportive best friend. 
+You must strictly follow these rules:
+1. ABSOLUTELY NO CHINESE: You MUST write your entire response in the THAI language ONLY. Do NOT output any Chinese characters, pinyin, or foreign alphabets.
+2. STRICTLY CONTEXT-BASED: You must base your advice ONLY on the provided [CONTEXT]. Do NOT invent facts. If the [CONTEXT] does not contain the answer, gently say "เรื่องนี้เราอาจจะไม่มีข้อมูลเจาะจงนะ แต่..." and just offer general emotional support.
+3. BEST FRIEND TONE: Speak naturally like a caring Thai friend. Use pronouns like "เรา" (I) and "ตัวเอง/เธอ" (you). Use warm ending particles like "นะ", "สู้ๆนะ", "เป็นกำลังใจให้นะ".
+4. CITE SOURCES: At the end of your response, you MUST include a short note telling the user which file(s) you got the information from, based on the tags in the [CONTEXT]. Example format: "(อ้างอิงจากไฟล์: ...)"
 
-    ข้อมูลอ้างอิง (Context):
-    {context}
+[CONTEXT (Reference Data)]
+{context}
 
-    ประวัติการสนทนา:
-    {history_text}
+[CHAT HISTORY]
+{history_text}
 
-    คำถามปัจจุบัน: {item.query}
-    
-    คำแนะนำจาก Mindi (ตอบเป็นภาษาไทย):"""
+[USER QUESTION]
+{item.query}
+
+[MINDI'S RESPONSE (THAI LANGUAGE ONLY)]:"""
         
         # 4. เรียกใช้ Ollama (Qwen2.5)
-        # ระบุโมเดลให้ตรงกับที่คุณ pull มา
         response = ollama.generate(model='qwen2.5:7b-instruct', prompt=prompt)
         
         return {"reply": response['response']}

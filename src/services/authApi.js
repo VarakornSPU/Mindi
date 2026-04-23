@@ -1,6 +1,4 @@
-﻿import { apiRequest } from './apiClient'
-
-const API_BASE_URL = 'http://localhost:8000'
+﻿const API_BASE_URL = 'http://localhost:8000'
 
 export const registerApi = (email, password) =>
   fetch(`${API_BASE_URL}/auth/register`, {

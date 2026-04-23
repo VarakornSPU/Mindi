@@ -39,7 +39,6 @@ const createMessageRecord = (role, content, id = null) => ({
   createdAt: new Date().toISOString(),
 })
 
-// Load initial chats from localStorage
 const loadInitialChats = (userId) => {
   const key = getChatsKey(userId)
   const chats = parseJson(localStorage.getItem(key), [])
@@ -72,17 +71,11 @@ const saveMessagesByChat = (value, userId) =>
 
 const API_BASE_URL = 'http://localhost:8000'
 
-const getRagReply = async (userMessage, chatHistory, token) => {
-  console.log('[RAG] All env vars:', import.meta.env)
+const getRagReply = async (userMessage, chatHistory) => {
   const ragUrl = String(import.meta.env.VITE_RAG_API_URL || '').trim()
-  console.log('[RAG] VITE_RAG_API_URL value:', ragUrl)
-  if (!ragUrl) {
-    console.warn('[RAG] No RAG_API_URL configured in .env')
-    return null
-  }
+  if (!ragUrl) return null
 
   try {
-    console.log('[RAG] Sending request to:', ragUrl)
     const response = await fetch(ragUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -91,21 +84,11 @@ const getRagReply = async (userMessage, chatHistory, token) => {
         history: chatHistory 
       }),
     })
-    
-    if (!response.ok) {
-      console.error('[RAG] Response error:', response.status, response.statusText)
-      return null
-    }
-    
-    const payload = await response.json().catch((e) => {
-      console.error('[RAG] JSON parse error:', e)
-      return {}
-    })
-    
-    console.log('[RAG] Received reply:', payload.reply?.substring(0, 100))
+    if (!response.ok) return null
+    const payload = await response.json().catch(() => ({}))
     return String(payload.reply || payload.message || '').trim() || null
   } catch (error) {
-    console.error('[RAG] Fetch error:', error.message)
+    console.error('RAG Error:', error)
     return null
   }
 }
@@ -117,7 +100,6 @@ export const useChat = ({ token, userId }) => {
   const [isTyping, setIsTyping] = useState(false)
   const [isLoadingChats, setIsLoadingChats] = useState(false)
 
-  // Save chats to localStorage
   useEffect(() => {
     saveChats(chats, userId)
   }, [chats, userId])
@@ -126,14 +108,23 @@ export const useChat = ({ token, userId }) => {
     saveMessagesByChat(messagesByChat, userId)
   }, [messagesByChat, userId])
 
-  // Load chats from backend when token/userId changes
+  // ✅ จุดแก้ที่ 1: การจัดการสถานะตอน Login และ Logout
   useEffect(() => {
     if (token && userId) {
       loadChatsFromBackend()
+    } else {
+      // เวลา Logout: ล้างค่าทุกอย่างทิ้งให้เป็นหน้าจอเปล่าๆ ป้องกันแชทรั่วไหลไปคนถัดไป
+      const freshChat = createChatRecord('แชทใหม่')
+      setChats([freshChat])
+      setCurrentChatId(freshChat.id)
+      setMessagesByChat({})
+      
+      // ลบ LocalStorage ของ Guest ทิ้ง เพื่อเคลียร์ขยะ
+      localStorage.removeItem(CHATS_STORAGE_KEY)
+      localStorage.removeItem(MESSAGES_STORAGE_KEY)
     }
   }, [token, userId])
 
-  // Load chat messages when switching chats
   useEffect(() => {
     if (currentChatId && token && userId) {
       loadMessagesFromBackend(currentChatId)
@@ -155,13 +146,31 @@ export const useChat = ({ token, userId }) => {
             updatedAt: session.updatedAt
           }))
           setChats(backendChats)
-          if (backendChats.length > 0) {
-            setCurrentChatId(backendChats[0].id)
+          setCurrentChatId(backendChats[0].id)
+        } else {
+          // ✅ จุดแก้ที่ 2: ถ้า User ล็อกอินมาแต่ยังไม่เคยมีแชทใน Database
+          // บังคับเคลียร์ State และยิง API สร้างแชทแรกลง Database เลย
+          setChats([])
+          setCurrentChatId(null)
+          
+          const title = 'แชทใหม่'
+          const createRes = await fetch(`${API_BASE_URL}/chat/sessions?user_id=${userId}&token=${token}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title })
+          })
+          
+          if (createRes.ok) {
+            const createData = await createRes.json()
+            const nextChat = createChatRecord(title, createData.session_id)
+            setChats([nextChat])
+            setCurrentChatId(nextChat.id)
+            setMessagesByChat(prev => ({ ...prev, [nextChat.id]: [] }))
           }
         }
       }
     } catch (error) {
-      console.error('Error loading chats from backend:', error)
+      console.error('Error loading chats:', error)
     } finally {
       setIsLoadingChats(false)
     }
@@ -180,25 +189,16 @@ export const useChat = ({ token, userId }) => {
             content: msg.content,
             createdAt: msg.createdAt
           }))
-          setMessagesByChat(prev => ({
-            ...prev,
-            [sessionId]: messages
-          }))
+          setMessagesByChat(prev => ({ ...prev, [sessionId]: messages }))
         }
-      } else if (response.status === 403) {
-        console.error('Unauthorized: You do not have access to this chat session')
-        // Clear messages if unauthorized
-        setMessagesByChat(prev => ({
-          ...prev,
-          [sessionId]: []
-        }))
+      } else if (response.status === 403 || response.status === 404) {
+        setMessagesByChat(prev => ({ ...prev, [sessionId]: [] }))
       }
     } catch (error) {
-      console.error('Error loading messages from backend:', error)
+      console.error('Error loading messages:', error)
     }
   }
 
-  // Compute current messages and chat
   const messages = useMemo(() => messagesByChat[currentChatId] || [], [messagesByChat, currentChatId])
 
   const currentChat = useMemo(() => {
@@ -206,13 +206,19 @@ export const useChat = ({ token, userId }) => {
     return chat ? { ...chat, messages } : null
   }, [chats, currentChatId, messages])
 
+  // ✅ จุดแก้ที่ 3: ปรับปรุงฟังก์ชันสร้างแชท
   const createNewChat = async () => {
-    if (!token || !userId) return
-    
     const title = 'แชทใหม่'
     
+    // ถ้ายังไม่ล็อกอิน ให้สร้างแบบ Local ธรรมดา
+    if (!token || !userId) {
+      const nextChat = createChatRecord(title)
+      setChats((prev) => [nextChat, ...prev])
+      setCurrentChatId(nextChat.id)
+      return
+    }
+    
     try {
-      // Create chat on backend (include auth)
       const response = await fetch(`${API_BASE_URL}/chat/sessions?user_id=${userId}&token=${token}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -222,48 +228,32 @@ export const useChat = ({ token, userId }) => {
       if (!response.ok) throw new Error('Failed to create session')
 
       const data = await response.json()
-      const nextChat = createChatRecord(title, data.session_id)
+      const nextChat = createChatRecord(title, data.session_id) // ใช้ ID จริงจาก Database
 
       setChats((prev) => [nextChat, ...prev])
       setCurrentChatId(nextChat.id)
-      setMessagesByChat(prev => ({
-        ...prev,
-        [nextChat.id]: []
-      }))
+      setMessagesByChat(prev => ({ ...prev, [nextChat.id]: [] }))
     } catch (error) {
       console.error('Error creating chat:', error)
-      // Fallback: create locally
-      const nextChat = createChatRecord(title)
-      setChats((prev) => [nextChat, ...prev])
-      setCurrentChatId(nextChat.id)
     }
   }
 
   const selectChat = (chatId) => setCurrentChatId(chatId)
 
   const deleteChat = async (chatId) => {
-    if (!token || !userId) return
-    
-    try {
-      // Delete from backend
-      const response = await fetch(`${API_BASE_URL}/chat/sessions/${chatId}?user_id=${userId}&token=${token}`, {
-        method: 'DELETE'
-      })
-      
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || 'Failed to delete session')
+    if (token && userId) {
+      try {
+        await fetch(`${API_BASE_URL}/chat/sessions/${chatId}?user_id=${userId}&token=${token}`, {
+          method: 'DELETE'
+        })
+      } catch (error) {
+        console.error('Error deleting chat:', error)
       }
-    } catch (error) {
-      console.error('Error deleting chat:', error)
     }
     
-    // Delete locally
     setChats((prev) => {
       const next = prev.filter((chat) => chat.id !== chatId)
-      if (currentChatId === chatId) {
-        setCurrentChatId(next[0]?.id || null)
-      }
+      if (currentChatId === chatId) setCurrentChatId(next[0]?.id || null)
       return next
     })
     setMessagesByChat((prev) => {
@@ -280,32 +270,25 @@ export const useChat = ({ token, userId }) => {
     const userMessage = createMessageRecord('user', messageText)
     const updatedMessages = [...messages, userMessage]
 
-    // Update local state
     setMessagesByChat((prev) => ({
       ...prev,
       [currentChatId]: updatedMessages,
     }))
 
-    // Save user message to backend
-    try {
-      if (token && userId) {
-        await fetch(`${API_BASE_URL}/chat/messages?user_id=${userId}&token=${token}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            user_id: userId,
-            session_id: currentChatId,
-            role: 'user',
-            content: messageText,
-            message_type: 'text'
-          })
+    if (token && userId) {
+      fetch(`${API_BASE_URL}/chat/messages?user_id=${userId}&token=${token}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: userId,
+          session_id: currentChatId,
+          role: 'user',
+          content: messageText,
+          message_type: 'text'
         })
-      }
-    } catch (error) {
-      console.error('Error saving user message:', error)
+      }).catch(console.error)
     }
 
-    // Update chat title if it's new
     setChats((prev) =>
       prev.map((chat) => {
         if (chat.id !== currentChatId) return chat
@@ -315,7 +298,7 @@ export const useChat = ({ token, userId }) => {
     )
 
     setIsTyping(true)
-    const ragReply = await getRagReply(messageText, updatedMessages, token)
+    const ragReply = await getRagReply(messageText, updatedMessages)
 
     setTimeout(() => {
       const botMessage = createMessageRecord('bot', ragReply || TH_FALLBACK_REPLY)
@@ -324,9 +307,8 @@ export const useChat = ({ token, userId }) => {
         [currentChatId]: [...updatedMessages, botMessage],
       }))
       
-      // Save bot message to backend
       if (token && userId) {
-        fetch(`${API_BASE_URL}/chat/messages`, {
+        fetch(`${API_BASE_URL}/chat/messages?user_id=${userId}&token=${token}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -336,7 +318,7 @@ export const useChat = ({ token, userId }) => {
             content: botMessage.content,
             message_type: 'text'
           })
-        }).catch(error => console.error('Error saving bot message:', error))
+        }).catch(console.error)
       }
       
       setChats((prev) =>

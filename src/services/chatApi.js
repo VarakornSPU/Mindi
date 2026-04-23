@@ -1,6 +1,4 @@
-﻿import { apiRequest } from './apiClient'
-
-const API_BASE_URL = 'http://localhost:8000'
+﻿const API_BASE_URL = 'http://localhost:8000'
 
 // List all chat sessions for a user
 export const listChatsApi = (token, userId) =>

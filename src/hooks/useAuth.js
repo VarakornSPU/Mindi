@@ -53,7 +53,7 @@ export const useAuth = () => {
       }
 
       const data = await response.json()
-      
+
       // Store JWT token and user info
       const jwtToken = data.token
       updateAuth(jwtToken, {
@@ -94,8 +94,14 @@ export const useAuth = () => {
         return { ok: false, error: errorData.error || 'Registration failed' }
       }
 
-      const data = await response.json()
-      
+      // ❌ โค้ดเดิมที่มีปัญหา:
+      // const data = await response.json()
+
+      // ✅ วิธีแก้ที่ 1: เปลี่ยนเป็นแค่รออ่านข้อมูลให้จบเฉยๆ ไม่ต้องสร้างตัวแปรมารับ
+      await response.json()
+
+      // (หรือ ✅ วิธีแก้ที่ 2: ลบบรรทัดบนทิ้งไปเลยก็ได้ครับ)
+
       // Automatically log them in after registration
       // For now, we need to call login to get JWT token
       return login({ email: normalizedEmail, password: rawPassword })

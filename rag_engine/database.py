@@ -10,6 +10,7 @@ from typing import Dict, List, Optional
 import os
 from dotenv import load_dotenv
 import logging
+import certifi  # เพิ่ม certifi เพื่อป้องกันปัญหา SSL บน MongoDB Atlas
 
 # Load environment variables
 load_dotenv()
@@ -32,7 +33,12 @@ def connect_mongodb():
     """
     global client, db
     try:
-        client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=5000)
+        # ใช้ certifi.where() เพื่อแก้ไขปัญหา SSL handshake บน Mac
+        client = MongoClient(
+            MONGODB_URI, 
+            serverSelectionTimeoutMS=5000,
+            tlsCAFile=certifi.where() 
+        )
         # Verify connection
         client.admin.command('ping')
         db = client[MONGODB_DB_NAME]
@@ -65,6 +71,9 @@ def initialize_collections():
         
         # Create ChatHistory Collection
         create_chat_history_collection()
+        
+        # Create Sessions Collection
+        create_sessions_collection()
         
         logger.info("✅ All collections initialized successfully")
         return True
@@ -162,19 +171,6 @@ def create_user_document(
     email: str,
     password_hash: str,
 ) -> Dict:
-    """
-    Create a user document with default values
-    
-    Schema:
-    {
-        "_id": ObjectId,
-        "email": str (unique, indexed),
-        "password_hash": str,
-        "createdAt": datetime (indexed),
-        "updatedAt": datetime,
-        "is_active": bool
-    }
-    """
     return {
         "email": email,
         "password_hash": password_hash,
@@ -195,26 +191,6 @@ def create_chat_message_document(
     message_type: str = "text",
     metadata: Optional[Dict] = None,
 ) -> Dict:
-    """
-    Create a chat message document
-    
-    Schema:
-    {
-        "_id": ObjectId,
-        "userId": str (indexed),
-        "sessionId": str (indexed),
-        "role": str ("user" or "bot"),
-        "content": str,
-        "message_type": str ("text", "image", "document"),
-        "timestamp": datetime,
-        "createdAt": datetime (compound indexed with userId),
-        "metadata": {
-            "sources": [str],
-            "confidence": float,
-            "model_version": str
-        }
-    }
-    """
     now = datetime.utcnow()
     return {
         "userId": user_id,
@@ -236,20 +212,6 @@ def create_chat_session_document(
     user_id: str,
     session_title: str = "New Chat",
 ) -> Dict:
-    """
-    Create a chat session document to group related conversations
-    
-    Schema:
-    {
-        "_id": ObjectId,
-        "userId": str,
-        "session_title": str,
-        "createdAt": datetime,
-        "updatedAt": datetime,
-        "message_count": int,
-        "is_archived": bool
-    }
-    """
     now = datetime.utcnow()
     return {
         "userId": user_id,
@@ -317,7 +279,6 @@ def get_chat_history(user_id: str, session_id: str, limit: int = 50) -> List[Dic
             .sort("createdAt", ASCENDING)
             .limit(limit)
         )
-        # Convert ObjectId to string for JSON serialization
         for msg in messages:
             msg["_id"] = str(msg["_id"])
         return messages
@@ -333,9 +294,11 @@ def get_chat_history(user_id: str, session_id: str, limit: int = 50) -> List[Dic
 def create_chat_session(user_id: str, session_title: str = "New Chat") -> str:
     """Create a new chat session and return the session ID"""
     try:
-        collection = db["Sessions"] if db else None
-        if not collection:
+        # ✅ แก้ไขเรื่องการเช็ค db (PyMongo quirk)
+        if db is None:
             raise RuntimeError("Database not connected")
+        
+        collection = db["Sessions"]
         
         session_data = {
             "userId": user_id,
@@ -357,9 +320,11 @@ def create_chat_session(user_id: str, session_title: str = "New Chat") -> str:
 def list_user_sessions(user_id: str) -> List[Dict]:
     """List all chat sessions for a user"""
     try:
-        collection = db["Sessions"] if db else None
-        if not collection:
+        # ✅ แก้ไขเรื่องการเช็ค db (PyMongo quirk)
+        if db is None:
             raise RuntimeError("Database not connected")
+            
+        collection = db["Sessions"]
         
         sessions = list(
             collection
@@ -367,7 +332,6 @@ def list_user_sessions(user_id: str) -> List[Dict]:
             .sort("updatedAt", DESCENDING)
         )
         
-        # Convert ObjectId to string for JSON serialization
         for session in sessions:
             session["_id"] = str(session["_id"])
         
@@ -381,9 +345,11 @@ def get_session_by_id(session_id: str) -> Optional[Dict]:
     """Get a specific chat session by ID"""
     try:
         from bson import ObjectId
-        collection = db["Sessions"] if db else None
-        if not collection:
+        # ✅ แก้ไขเรื่องการเช็ค db (PyMongo quirk)
+        if db is None:
             raise RuntimeError("Database not connected")
+            
+        collection = db["Sessions"]
         
         session = collection.find_one({"_id": ObjectId(session_id)})
         if session:
@@ -398,6 +364,9 @@ def delete_session(session_id: str) -> bool:
     """Delete a chat session and all its messages"""
     try:
         from bson import ObjectId
+        if db is None:
+            raise RuntimeError("Database not connected")
+            
         sessions_collection = db["Sessions"]
         messages_collection = db["History"]
         
@@ -420,6 +389,9 @@ def update_session_title(session_id: str, new_title: str) -> bool:
     """Update the title of a chat session"""
     try:
         from bson import ObjectId
+        if db is None:
+            raise RuntimeError("Database not connected")
+            
         collection = db["Sessions"]
         
         result = collection.update_one(
@@ -441,6 +413,9 @@ def update_session_title(session_id: str, new_title: str) -> bool:
 def get_session_messages(session_id: str, limit: int = 50) -> List[Dict]:
     """Get all messages for a specific session"""
     try:
+        if db is None:
+            raise RuntimeError("Database not connected")
+            
         collection = db["History"]
         
         messages = list(
@@ -450,7 +425,6 @@ def get_session_messages(session_id: str, limit: int = 50) -> List[Dict]:
             .limit(limit)
         )
         
-        # Convert ObjectId to string for JSON serialization
         for msg in messages:
             msg["_id"] = str(msg["_id"])
         
@@ -489,31 +463,6 @@ def create_sessions_collection():
         logger.warning(f"Index creation note: {e}")
     
     return sessions_collection
-
-
-# Update initialize_collections to include Sessions
-_original_initialize_collections = initialize_collections
-
-def initialize_collections():
-    """Initialize and create collections with proper schema and indexes"""
-    if db is None:
-        raise RuntimeError("Database not connected. Call connect_mongodb() first.")
-    
-    try:
-        # Create Users Collection
-        create_users_collection()
-        
-        # Create ChatHistory Collection
-        create_chat_history_collection()
-        
-        # Create Sessions Collection
-        create_sessions_collection()
-        
-        logger.info("✅ All collections initialized successfully")
-        return True
-    except Exception as e:
-        logger.error(f"❌ Error initializing collections: {e}")
-        raise
 
 
 if __name__ == "__main__":
