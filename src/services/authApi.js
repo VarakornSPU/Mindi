@@ -1,11 +1,30 @@
 ﻿import { apiRequest } from './apiClient'
 
-export const registerApi = (input) =>
-  apiRequest('/api/auth/register', { method: 'POST', body: input })
+const API_BASE_URL = 'http://localhost:8000'
 
-export const loginApi = (input) => apiRequest('/api/auth/login', { method: 'POST', body: input })
+export const registerApi = (email, password) =>
+  fetch(`${API_BASE_URL}/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password })
+  }).then(res => res.json())
 
-export const getMeApi = (token) => apiRequest('/api/auth/me', { token })
+export const loginApi = (email, password) =>
+  fetch(`${API_BASE_URL}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password })
+  }).then(res => res.json())
+
+export const getMeApi = (token) =>
+  fetch(`${API_BASE_URL}/auth/me?token=${token}`).then(res => res.json())
 
 export const updateProfileApi = (token, name) =>
-  apiRequest('/api/auth/profile', { method: 'PUT', token, body: { name } })
+  fetch(`${API_BASE_URL}/auth/profile`, {
+    method: 'PUT',
+    headers: { 
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({ name })
+  }).then(res => res.json())

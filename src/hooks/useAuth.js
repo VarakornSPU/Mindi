@@ -1,10 +1,6 @@
 import { useState } from 'react'
 
 const AUTH_STORAGE_KEY = 'mindi_auth'
-const USERS_STORAGE_KEY = 'mindi_users'
-
-const createId = () =>
-  globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`
 
 const parseJson = (value, fallback) => {
   try {
@@ -14,18 +10,13 @@ const parseJson = (value, fallback) => {
   }
 }
 
-const loadUsers = () => parseJson(localStorage.getItem(USERS_STORAGE_KEY), [])
-
-const saveUsers = (users) => {
-  localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users))
-}
-
 const loadAuth = () => parseJson(localStorage.getItem(AUTH_STORAGE_KEY), { token: '', user: null })
 
 export const useAuth = () => {
   const initialAuth = loadAuth()
   const [token, setToken] = useState(initialAuth.token || '')
   const [currentUser, setCurrentUser] = useState(initialAuth.user || null)
+  const [loading, setLoading] = useState(false)
 
   const updateAuth = (newToken, newUser) => {
     setToken(newToken)
@@ -37,6 +28,9 @@ export const useAuth = () => {
     }
   }
 
+  // Backend API URL (FastAPI on port 8000)
+  const API_BASE = 'http://localhost:8000'
+
   const login = async ({ email, password }) => {
     const normalizedEmail = String(email || '').trim().toLowerCase()
     const rawPassword = String(password || '')
@@ -45,22 +39,35 @@ export const useAuth = () => {
       return { ok: false, error: 'Please enter email and password' }
     }
 
-    const users = loadUsers()
-    const found = users.find(
-      (user) => user.email === normalizedEmail && user.password === rawPassword,
-    )
+    try {
+      setLoading(true)
+      const response = await fetch(`${API_BASE}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: normalizedEmail, password: rawPassword })
+      })
 
-    if (!found) {
-      return { ok: false, error: 'Invalid email or password' }
+      if (!response.ok) {
+        const errorData = await response.json()
+        return { ok: false, error: errorData.error || 'Login failed' }
+      }
+
+      const data = await response.json()
+      
+      // Store JWT token and user info
+      const jwtToken = data.token
+      updateAuth(jwtToken, {
+        id: data.user_id,
+        email: data.email,
+        createdAt: new Date().toISOString()
+      })
+
+      return { ok: true }
+    } catch (error) {
+      return { ok: false, error: 'Network error: ' + error.message }
+    } finally {
+      setLoading(false)
     }
-
-    updateAuth(createId(), {
-      id: found.id,
-      email: found.email,
-      createdAt: found.createdAt,
-    })
-
-    return { ok: true }
   }
 
   const register = async ({ email, password, confirmPassword }) => {
@@ -74,41 +81,41 @@ export const useAuth = () => {
       return { ok: false, error: 'Password confirmation does not match' }
     }
 
-    const users = loadUsers()
-    if (users.some((user) => user.email === normalizedEmail)) {
-      return { ok: false, error: 'Email already exists' }
+    try {
+      setLoading(true)
+      const response = await fetch(`${API_BASE}/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: normalizedEmail, password: rawPassword })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        return { ok: false, error: errorData.error || 'Registration failed' }
+      }
+
+      const data = await response.json()
+      
+      // Automatically log them in after registration
+      // For now, we need to call login to get JWT token
+      return login({ email: normalizedEmail, password: rawPassword })
+    } catch (error) {
+      return { ok: false, error: 'Network error: ' + error.message }
+    } finally {
+      setLoading(false)
     }
-
-    const now = new Date().toISOString()
-    const id = createId()
-
-    saveUsers([
-      ...users,
-      {
-        id,
-        email: normalizedEmail,
-        password: rawPassword,
-        createdAt: now,
-      },
-    ])
-
-    updateAuth(createId(), {
-      id,
-      email: normalizedEmail,
-      createdAt: now,
-    })
-
-    return { ok: true }
   }
 
   const logout = () => {
     updateAuth('', null)
+    return { ok: true }
   }
 
   return {
     token,
-    isAuthenticated: Boolean(token && currentUser),
     currentUser,
+    isAuthenticated: !!token && !!currentUser,
+    loading,
     login,
     register,
     logout,

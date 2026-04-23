@@ -6,7 +6,10 @@ const AppContext = createContext(null)
 
 export function AppProvider({ children }) {
   const auth = useAuth()
-  const chat = useChat({ currentUser: auth.currentUser, token: auth.token })
+  const chat = useChat({ 
+    token: auth.token, 
+    userId: auth.currentUser?.id 
+  })
 
   const value = useMemo(() => ({ auth, chat }), [auth, chat])
 
