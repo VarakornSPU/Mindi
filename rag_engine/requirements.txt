@@ -1,3 +1,3 @@
-pip install fastapi uvicorn ollama langchain-huggingface langchain-community chromadb pandas openpyxl unstructured jq pymongo python-dotenv pyjwt
+pip install fastapi uvicorn ollama langchain-huggingface langchain-community chromadb pandas openpyxl unstructured jq pymongo python-dotenv pyjwt sentence-transformers
 
 uvicorn main:app --reload --port 8000
