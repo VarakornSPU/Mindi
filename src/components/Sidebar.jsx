@@ -97,7 +97,7 @@ function SidebarContent({
           className="flex w-full items-center gap-3 rounded-2xl border border-white/70 bg-white/80 px-3 py-2.5 text-left text-sm font-medium text-[#4B5563] shadow-md transition hover:bg-[#D6C7F0]/30"
         >
           <i className="bi bi-journal-richtext text-base text-[#7C8FB0]" />
-          <span>อ่านบทความให้กำลังใจ</span>
+          <span>หนังสืออ้างอิง</span>
         </button>
       </section>
 
